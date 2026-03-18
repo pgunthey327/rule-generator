@@ -1,0 +1,77 @@
+import * as XLSX from 'xlsx';
+
+export const readExcelFile = (file: File): Promise<{
+  data: Record<string, any>[];
+  headers: string[];
+}> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = e.target?.result;
+        const workbook = XLSX.read(data, { type: 'binary' });
+        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet) as Record<string, any>[];
+        const headers = Object.keys(jsonData[0] || {});
+        resolve({
+          data: jsonData,
+          headers,
+        });
+      } catch (error) {
+        reject(error);
+      }
+    };
+    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.readAsBinaryString(file);
+  });
+};
+
+export const convertJsonToExcel = (data: Record<string, any>[], filename: string) => {
+  const worksheet = XLSX.utils.json_to_sheet(data);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1');
+  XLSX.writeFile(workbook, filename);
+};
+
+export const updateCellValue = (
+  data: Record<string, any>[],
+  rowIndex: number,
+  columnName: string,
+  value: any
+): Record<string, any>[] => {
+  const newData = [...data];
+  if (newData[rowIndex]) {
+    newData[rowIndex] = {
+      ...newData[rowIndex],
+      [columnName]: value,
+    };
+  }
+  return newData;
+};
+
+export const addRow = (data: Record<string, any>[], headers: string[]): Record<string, any>[] => {
+  const newRow: Record<string, any> = {};
+  headers.forEach((header) => {
+    newRow[header] = '';
+  });
+  return [...data, newRow];
+};
+
+export const deleteRow = (data: Record<string, any>[], rowIndex: number): Record<string, any>[] => {
+  return data.filter((_, index) => index !== rowIndex);
+};
+
+export const addColumn = (data: Record<string, any>[], columnName: string): Record<string, any>[] => {
+  return data.map((row) => ({
+    ...row,
+    [columnName]: '',
+  }));
+};
+
+export const deleteColumn = (data: Record<string, any>[], columnName: string): Record<string, any>[] => {
+  return data.map((row) => {
+    const newRow = { ...row };
+    delete newRow[columnName];
+    return newRow;
+  });
+};
