@@ -3,16 +3,15 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAppStore } from './store/appStore';
 import { Login } from './components/Login';
 import { ExcelManager } from './components/ExcelManager';
-import { GitHubIntegration } from './components/GitHubIntegration';
 import { RuleGenerator } from './components/RuleGenerator';
 import { Console } from './components/Console';
 import { logService } from './services/logService';
 import './styles/App.css';
 
-type TabType = 'github' | 'excel' | 'generator';
+type TabType = 'excel' | 'generator';
 
 const Dashboard = () => {
-  const [activeTab, setActiveTab] = useState<TabType>('github');
+  const [activeTab, setActiveTab] = useState<TabType>('excel');
   const user = useAppStore((state) => state.user);
   const logout = useAppStore((state) => state.logout);
 
@@ -23,12 +22,6 @@ const Dashboard = () => {
   }, [user?.username, user?.role]);
 
   const tabs: { id: TabType; label: string; icon: string; component: React.ReactNode }[] = [
-    {
-      id: 'github',
-      label: 'GitHub Integration',
-      icon: '🔗',
-      component: <GitHubIntegration />,
-    },
     {
       id: 'excel',
       label: 'Excel Manager',
@@ -69,11 +62,7 @@ const Dashboard = () => {
               <button
                 key={tab.id}
                 onClick={() => handleTabChange(tab.id)}
-                className={`tab-button ${activeTab === tab.id ? 'active' : ''} ${
-                  tab.id !== 'excel' && !isEditUser ? 'disabled' : ''
-                }`}
-                disabled={tab.id !== 'excel' && !isEditUser}
-                title={tab.id !== 'excel' && !isEditUser ? 'Requires Edit Access' : ''}
+                className={`tab-button ${activeTab === tab.id ? 'active' : ''}`}
               >
                 <span className="tab-icon">{tab.icon}</span>
                 <span className="tab-label">{tab.label}</span>
@@ -84,7 +73,7 @@ const Dashboard = () => {
           {!isEditUser && (
             <div className="read-only-badge">
               <p>⚠️ Read-Only Access</p>
-              <p>GitHub & Generator unavailable</p>
+              <p>Rule Generator unavailable</p>
             </div>
           )}
         </aside>
@@ -102,9 +91,9 @@ const Dashboard = () => {
           </div>
         </main>
 
-        <aside className="dashboard-console">
+        {/* <aside className="dashboard-console">
           <Console />
-        </aside>
+        </aside> */}
       </div>
     </div>
   );
