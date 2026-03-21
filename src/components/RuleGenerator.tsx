@@ -101,7 +101,7 @@ export const RuleGenerator = () => {
         filteredData,
         oids,
         lob,
-        githubConfig.helpers.join('\n')
+        githubConfig.helpers || ''
       );
 
       setGeneratedCode(codeResponse.code);

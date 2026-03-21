@@ -29,7 +29,7 @@ export interface GitHubConfig {
   repoUrl: string;
   branch: string;
   token: string;
-  helpers: string[];
+  helpers: string;
   ruleId?: string;
   rulePath?: string;
 }

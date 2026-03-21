@@ -1,14 +1,18 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useAppStore } from '../store/appStore';
 import { readExcelFile, convertJsonToExcel, updateCellValue, addRow, deleteRow, addColumn, deleteColumn } from '../utils/excelUtils';
 import { GitHubService, type GitHubBranch } from '../services/githubService';
 import { logService } from '../services/logService';
 import type { ExcelData } from '../types';
 import '../styles/ExcelManager.css';
+import JsonView from '@uiw/react-json-view';
 
 export const ExcelManager = () => {
   const [loading, setLoading] = useState(false);
   const [activeExcelTab, setActiveExcelTab] = useState<1 | 2>(1);
+  const [showDataModal, setShowDataModal] = useState(false);
+  const [modalData, setModalData] = useState<any>(null);
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
   const file1Ref = useRef<HTMLInputElement>(null);
   const file2Ref = useRef<HTMLInputElement>(null);
 
@@ -16,7 +20,8 @@ export const ExcelManager = () => {
   const [repoUrl, setRepoUrl] = useState('');
   const [branches, setBranches] = useState<GitHubBranch[]>([]);
   const [selectedBranch, setSelectedBranch] = useState('');
-  const [selectedRule, setSelectedRule] = useState('');
+  const [lob, setLob] = useState('');
+  const [helpersContent, setHelpersContent] = useState('');
   const [gitHubLoading, setGitHubLoading] = useState(false);
 
   const excelData = useAppStore((state) => state.excelData);
@@ -27,35 +32,43 @@ export const ExcelManager = () => {
   // Get tokens from environment variables
   const GITHUB_TOKEN = import.meta.env.VITE_GITHUB_TOKEN || '';
 
-  // GitHub integration handlers
-  const handleFetchBranches = async () => {
+  // Auto-fetch branches when repo URL changes
+  useEffect(() => {
     if (!repoUrl || !GITHUB_TOKEN) {
-      logService.warning('GitHub configuration incomplete', 'Missing repo URL or token in env');
+      setBranches([]);
+      setSelectedBranch('');
       return;
     }
 
-    setGitHubLoading(true);
-    try {
-      const service = new GitHubService(GITHUB_TOKEN);
-      const parsed = service.parseRepoUrl(repoUrl);
+    const fetchBranches = async () => {
+      setGitHubLoading(true);
+      try {
+        const service = new GitHubService(GITHUB_TOKEN);
+        const parsed = service.parseRepoUrl(repoUrl);
 
-      if (!parsed) {
-        throw new Error('Invalid GitHub URL format');
+        if (!parsed) {
+          logService.warning('Invalid GitHub URL', `Cannot parse: ${repoUrl}`);
+          setBranches([]);
+          return;
+        }
+
+        const fetchedBranches = await service.getBranches(parsed.owner, parsed.repo);
+        logService.success('GitHub branches fetched', `Found ${fetchedBranches.length} branches`);
+        setBranches(fetchedBranches);
+      } catch (err) {
+        logService.error('GitHub fetch failed', err instanceof Error ? err.message : 'Unknown error');
+        setBranches([]);
+      } finally {
+        setGitHubLoading(false);
       }
+    };
 
-      const fetchedBranches = await service.getBranches(parsed.owner, parsed.repo);
-      logService.success('GitHub branches fetched', `Found ${fetchedBranches.length} branches`);
-      setBranches(fetchedBranches);
-    } catch (err) {
-      logService.error('GitHub fetch failed', err instanceof Error ? err.message : 'Unknown error');
-    } finally {
-      setGitHubLoading(false);
-    }
-  };
+    const timer = setTimeout(fetchBranches, 500); // Debounce to avoid too many requests
+    return () => clearTimeout(timer);
+  }, [repoUrl, GITHUB_TOKEN]);
 
   const handleBranchSelect = async (branchName: string) => {
     setSelectedBranch(branchName);
-    setSelectedRule('');
 
     if (!repoUrl || !GITHUB_TOKEN) return;
 
@@ -66,22 +79,19 @@ export const ExcelManager = () => {
 
       if (!parsed) throw new Error('Invalid GitHub URL format');
 
-      // Fetch helpers content and store in config
-      const files = await service.listFilesInFolder(parsed.owner, parsed.repo, 'helpers', branchName);
+      // Fetch helpers content and store in state
+      const files = await service.listFilesInFolder(parsed.owner, parsed.repo, 'definition/helpers', branchName);
       const concatenatedContent = files
         .map((file) => `// File: ${file.path}\n${file.content}`)
         .join('\n\n');
-
+console.log('Fetched helpers content:', concatenatedContent);
+      setHelpersContent(concatenatedContent);
       setGitHubConfig({
         branch: branchName,
-        helpers: files.map((f) => f.path),
+        helpers: concatenatedContent,
       });
 
-      // Store helpers content in a store method or use it when needed
-      (window as any).__helpersContent = concatenatedContent;
-
-      // Fetch available rules
-
+      logService.success('Helpers fetched', `Loaded ${files.length} helper files`);
     } catch (err) {
       logService.error('Failed to fetch branch content', err instanceof Error ? err.message : 'Unknown error');
     } finally {
@@ -89,11 +99,62 @@ export const ExcelManager = () => {
     }
   };
 
-  const handleRuleSelect = (ruleId: string) => {
-    setSelectedRule(ruleId);
-    setGitHubConfig({
-      ruleId,
+  // Kept for future use with Rule ID input
+  // const handleRuleSelect = (ruleId: string) => {
+  //   setSelectedRule(ruleId);
+  //   setGitHubConfig({
+  //     ruleId,
+  //   });
+  // };
+
+  const handleLogExcelData = async () => {
+    const restData = await getRestData();
+    const refinedFile2 = Object.values(excelData.file2?.data || {}).filter(row => {
+            console.log(row[lob] === 'Y' , restData.objectIdList[0].includes(row["Object Id"]) , row["Path Type"]);
+            return row[lob] === 'Y' && restData.objectIdList[0].includes(row["Object Id"]) && (row["Path Type"] === 'SCBP BOM' || row["Path Type"] === 'SCBP XOM');
+        });
+    if(refinedFile2.length < 2){
+        
+    }
+    else{
+        const dataToLog = {
+            file1: excelData.file1,
+            file2: excelData.file2,
+            refinedFile2,
+            repoUrl,
+            branch: selectedBranch,
+            helpers: helpersContent,
+            lob,
+            ...restData,
+        };
+        setModalData(dataToLog);
+        setShowDataModal(true);
+        logService.info('Data viewer opened', `Total data size: ${JSON.stringify(dataToLog).length} characters`);
+    }
+   
+  };
+
+  const getRestData = async () => {
+    return { objectIdList: ['X58231'], RuleId: '1000023' };
+
+  }
+
+  const toggleExpanded = (key: string) => {
+    setExpandedKeys((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(key)) {
+        newSet.delete(key);
+      } else {
+        newSet.add(key);
+      }
+      return newSet;
     });
+  };
+
+  const closeModal = () => {
+    setShowDataModal(false);
+    setModalData(null);
+    setExpandedKeys(new Set());
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, fileNumber: 1 | 2) => {
@@ -282,12 +343,13 @@ export const ExcelManager = () => {
 
   return (
     <div className="excel-manager">
-      <h2>Excel File Manager</h2>
+      <h2>Data Manager</h2>
 
-      {/* GitHub Integration Section */}
+      {/* GitHub Integration Grid Section */}
       <div className="github-inputs-section">
-        <div className="github-inputs-row">
-          <div className="github-input-group">
+        <div className="github-inputs-grid">
+          {/* Top Left - Repo URL */}
+          <div className="github-grid-item">
             <label htmlFor="repo-url">Repository URL</label>
             <input
               id="repo-url"
@@ -300,46 +362,63 @@ export const ExcelManager = () => {
             />
           </div>
 
-          <div className="github-input-group">
+          {/* Top Right - Branch */}
+          <div className="github-grid-item">
             <label htmlFor="branch-select">Branch</label>
-            <div className="branch-select-wrapper">
-              <select
-                id="branch-select"
-                value={selectedBranch}
-                onChange={(e) => handleBranchSelect(e.target.value)}
-                disabled={gitHubLoading || branches.length === 0}
-                className="github-select"
-              >
-                <option value="">
-                  {branches.length === 0 ? 'Fetch branches first' : 'Select branch...'}
+            <select
+              id="branch-select"
+              value={selectedBranch}
+              onChange={(e) => handleBranchSelect(e.target.value)}
+              disabled={gitHubLoading || branches.length === 0}
+              className="github-select"
+            >
+              <option value="">
+                {branches.length === 0 ? 'Fetching...' : 'Select branch...'}
+              </option>
+              {branches.map((branch) => (
+                <option key={branch.name} value={branch.name}>
+                  {branch.name}
                 </option>
-                {branches.map((branch) => (
-                  <option key={branch.name} value={branch.name}>
-                    {branch.name}
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={handleFetchBranches}
-                disabled={!repoUrl || gitHubLoading}
-                className="btn btn-secondary"
-              >
-                {gitHubLoading ? 'Loading...' : 'Fetch Branches'}
-              </button>
-            </div>
+              ))}
+            </select>
           </div>
 
-          <div className="github-input-group">
-            <label htmlFor="rule-input">Rule ID</label>
-            <input
-              id="rule-input"
-              type="text"
-              value={selectedRule}
-              onChange={(e) => handleRuleSelect(e.target.value)}
-              placeholder="Enter rule ID (e.g., 1000023)"
+          {/* Bottom Left - LOB Dropdown */}
+          <div className="github-grid-item">
+            <label htmlFor="lob-select">Line of Business (LOB)</label>
+            <select
+              id="lob-select"
+              value={lob}
+              onChange={(e) => setLob(e.target.value)}
               disabled={gitHubLoading}
-              className="github-input"
-            />
+              className="github-select"
+            >
+              <option value="">Select LOB...</option>
+              <option value="WC">WC</option>
+              <option value="Auto">Auto</option>
+              <option value="Cross Product">Cross Product</option>
+            </select>
+          </div>
+
+          {/* Bottom Right - Log Data Button */}
+          <div className="github-grid-item">
+            <div style={{ display: 'flex', flexDirection: 'row' }}>
+                <button 
+                    onClick={handleLogExcelData} 
+                    className="btn btn-primary log-data-btn-grid"
+                    style={{ alignSelf: 'flex-end', width: '100%', marginTop: '38px' }}
+                    >
+                    📋 Log Excel Data
+                </button>
+                <button 
+                    onClick={handleLogExcelData} 
+                    className="btn btn-primary log-data-btn-grid"
+                    style={{ alignSelf: 'flex-end', width: '100%', marginTop: '38px' , marginLeft: '20px'}}
+                    >
+                    📋 Generate Rule
+                </button>
+            </div>
+   
           </div>
         </div>
       </div>
@@ -407,6 +486,41 @@ export const ExcelManager = () => {
       {!file1 && !file2 && (
         <div className="empty-state">
           <p>Upload Excel files to get started</p>
+        </div>
+      )}
+
+      {/* JSON Data Viewer Modal */}
+      {showDataModal && modalData && (
+        <div className="modal-overlay" onClick={closeModal}>
+          <div className="json-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>📊 Data Viewer</h3>
+              <button className="modal-close" onClick={closeModal}>✕</button>
+            </div>
+            <div className="modal-content-json">
+                
+              <div className="json-viewer">
+                <JsonView value={modalData} />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button 
+                onClick={() => {
+                  navigator.clipboard.writeText(JSON.stringify(modalData, null, 2));
+                  logService.success('Copied', 'Data copied to clipboard');
+                }}
+                className="btn btn-secondary"
+              >
+                📋 Copy JSON
+              </button>
+              <button 
+                onClick={closeModal}
+                className="btn btn-primary"
+              >
+                Close
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -75,18 +75,18 @@ export const GitHubIntegration = () => {
       const files = await service.listFilesInFolder(
         parsed.owner,
         parsed.repo,
-        'helpers',
+        'definition/helpers',
         selectedBranch
       );
 
       const concatenatedContent = files
         .map((file) => `// File: ${file.path}\n${file.content}`)
         .join('\n\n');
-
+      console.log('Fetched helpers content:', concatenatedContent);
       setHelpersContent(concatenatedContent);
       setGitHubConfig({
         branch: selectedBranch,
-        helpers: files.map((f) => f.path),
+        helpers: concatenatedContent,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch helpers folder');
@@ -204,44 +204,7 @@ export const GitHubIntegration = () => {
           </div>
           <p className="text-muted">{helpersContent.length} characters loaded</p>
         </div>
-      )}
-
-      {selectedBranch && (
-        <div className="github-section">
-          <h3>Locate Rule ID</h3>
-          <div className="form-group">
-            <label htmlFor="rule-id">Rule ID</label>
-            <input
-              id="rule-id"
-              type="text"
-              value={ruleId}
-              onChange={(e) => setRuleId(e.target.value)}
-              placeholder="Enter rule ID (e.g., RULE_001)"
-              className="form-input"
-            />
-          </div>
-
-          <button onClick={handleLocateRuleId} disabled={loading || !ruleId} className="btn btn-primary">
-            {loading ? 'Searching...' : 'Locate Rule'}
-          </button>
-        </div>
-      )}
-
-      {rulePath && (
-        <div className="github-section">
-          <h3>Rule File Path</h3>
-          <div className="form-group">
-            <label htmlFor="rule-path">Path</label>
-            <input
-              id="rule-path"
-              type="text"
-              value={rulePath}
-              readOnly
-              className="form-input"
-            />
-          </div>
-        </div>
-      )}
+      )} 
 
       {error && <div className="error-message">{error}</div>}
     </div>

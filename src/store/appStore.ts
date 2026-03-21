@@ -36,7 +36,7 @@ export const useAppStore = create<AppStore>((set) => ({
     repoUrl: '',
     branch: '',
     token: '',
-    helpers: [],
+    helpers: '',
   },
   generatedCode: null,
   loading: false,
@@ -66,7 +66,7 @@ export const useAppStore = create<AppStore>((set) => ({
         repoUrl: '',
         branch: '',
         token: '',
-        helpers: [],
+        helpers: '',
       },
       generatedCode: null,
     });
@@ -100,7 +100,7 @@ export const useAppStore = create<AppStore>((set) => ({
         repoUrl: '',
         branch: '',
         token: '',
-        helpers: [],
+        helpers: '',
       },
     });
   },

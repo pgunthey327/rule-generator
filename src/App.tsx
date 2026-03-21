@@ -4,7 +4,6 @@ import { useAppStore } from './store/appStore';
 import { Login } from './components/Login';
 import { ExcelManager } from './components/ExcelManager';
 import { RuleGenerator } from './components/RuleGenerator';
-import { Console } from './components/Console';
 import { logService } from './services/logService';
 import './styles/App.css';
 
@@ -24,16 +23,10 @@ const Dashboard = () => {
   const tabs: { id: TabType; label: string; icon: string; component: React.ReactNode }[] = [
     {
       id: 'excel',
-      label: 'Excel Manager',
+      label: 'Data Manager',
       icon: '📊',
       component: <ExcelManager />,
-    },
-    {
-      id: 'generator',
-      label: 'Rule Generator',
-      icon: '⚙️',
-      component: <RuleGenerator />,
-    },
+    }
   ];
 
   const handleTabChange = (tabId: TabType) => {

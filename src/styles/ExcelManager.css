@@ -27,14 +27,13 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
-.github-inputs-row {
+.github-inputs-grid {
   display: grid;
-  grid-template-columns: 2fr 1.5fr 1.5fr;
-  gap: 1rem;
-  align-items: flex-end;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
 }
 
-.github-input-group {
+.github-grid-item {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -111,10 +110,26 @@
   cursor: not-allowed;
 }
 
+.log-data-btn {
+  align-self: flex-end;
+  white-space: nowrap;
+}
+
+.log-data-btn-grid {
+  white-space: nowrap;
+  height: fit-content;
+}
+
 .file-upload-section {
   display: flex;
   gap: 1.5rem;
   flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.log-data-btn {
+  align-self: flex-end;
+  white-space: nowrap;
 }
 
 .file-upload-box {
@@ -403,8 +418,191 @@
   scrollbar-color: var(--gray-300) var(--gray-100);
 }
 
-@media (max-width: 1024px) {
-  .github-inputs-row {
+@media (max-width: 1400px) {
+  .github-inputs-grid {
     grid-template-columns: 1fr;
   }
+}
+
+@media (max-width: 1024px) {
+  .github-inputs-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .github-inputs-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* JSON Data Viewer Modal */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.json-modal {
+  background: white;
+  border-radius: 0.75rem;
+  max-width: 900px;
+  width: 90%;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--gray-200);
+}
+
+.modal-header {
+  padding: 1.5rem;
+  border-bottom: 1px solid var(--gray-200);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--gray-50);
+}
+
+.modal-header h3 {
+  margin: 0;
+  color: var(--primary);
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: var(--gray-600);
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.375rem;
+  transition: all 0.2s ease;
+}
+
+.modal-close:hover {
+  background: var(--gray-200);
+  color: var(--gray-900);
+}
+
+.modal-content-json {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.5rem;
+  background: white;
+}
+
+.json-viewer {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--gray-900);
+  text-align: left ;
+}
+
+.json-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  color: var(--primary);
+  font-weight: 600;
+  font-size: 0.9rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: color 0.2s ease;
+}
+
+.json-toggle:hover {
+  color: #003fa3;
+}
+
+.json-object,
+.json-array {
+  margin: 0.25rem 0;
+}
+
+.json-object-items,
+.json-array-items {
+  padding-left: 1.5rem;
+  margin-top: 0.25rem;
+}
+
+.json-item {
+  padding: 0.25rem 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.json-key {
+  color: #881391;
+  font-weight: 600;
+}
+
+.json-string {
+  color: #c41a16;
+}
+
+.json-number {
+  color: #0b7500;
+}
+
+.json-boolean {
+  color: #0066cc;
+  font-weight: 600;
+}
+
+.json-null {
+  color: #999999;
+  font-style: italic;
+}
+
+.modal-footer {
+  padding: 1.5rem;
+  border-top: 1px solid var(--gray-200);
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  background: var(--gray-50);
+}
+
+.modal-footer button {
+  white-space: nowrap;
+}
+
+/* Scrollbar for modal content */
+.modal-content-json::-webkit-scrollbar {
+  width: 8px;
+}
+
+.modal-content-json::-webkit-scrollbar-track {
+  background: var(--gray-100);
+  border-radius: 4px;
+}
+
+.modal-content-json::-webkit-scrollbar-thumb {
+  background: var(--gray-300);
+  border-radius: 4px;
+}
+
+.modal-content-json::-webkit-scrollbar-thumb:hover {
+  background: var(--gray-400);
 }
