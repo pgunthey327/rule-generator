@@ -1,5 +1,4 @@
 import axios from 'axios';
-import { encode, decode } from 'js-base64';
 
 export interface GitHubBranch {
   name: string;
@@ -16,26 +15,18 @@ export interface GitHubFile {
 }
 
 export class GitHubService {
-  private token: string;
-  private baseURL = 'https://api.github.com';
+  private serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
 
-  constructor(token: string) {
-    this.token = token;
-  }
-
-  private getHeaders() {
-    return {
-      Authorization: `token ${this.token}`,
-      Accept: 'application/vnd.github.v3+json',
-    };
+  constructor() {
+    // No need to store token - server handles it
   }
 
   async getBranches(owner: string, repo: string): Promise<GitHubBranch[]> {
     try {
-      const response = await axios.get(
-        `${this.baseURL}/repos/${owner}/${repo}/branches`,
-        { headers: this.getHeaders() }
-      );
+      const response = await axios.post(`${this.serverUrl}/api/github/branches`, {
+        owner,
+        repo,
+      });
       return response.data;
     } catch (error) {
       console.error('Error fetching branches:', error);
@@ -50,12 +41,13 @@ export class GitHubService {
     branch: string = 'main'
   ): Promise<string> {
     try {
-      const response = await axios.get(
-        `${this.baseURL}/repos/${owner}/${repo}/contents/${path}?ref=${branch}`,
-        { headers: this.getHeaders() }
-      );
-      const content = response.data.content;
-      return decode(content);
+      const response = await axios.post(`${this.serverUrl}/api/github/file-content`, {
+        owner,
+        repo,
+        path,
+        branch,
+      });
+      return response.data.content;
     } catch (error) {
       console.error('Error fetching file:', error);
       throw new Error(`Failed to fetch file: ${path}`);
@@ -69,23 +61,13 @@ export class GitHubService {
     branch: string = 'main'
   ): Promise<GitHubFile[]> {
     try {
-      const response = await axios.get(
-        `${this.baseURL}/repos/${owner}/${repo}/contents/${folderPath}?ref=${branch}`,
-        { headers: this.getHeaders() }
-      );
-
-      const files: GitHubFile[] = [];
-      for (const item of response.data) {
-        if (item.type === 'file') {
-          const content = await this.getFileContent(owner, repo, item.path, branch);
-          files.push({
-            name: item.name,
-            path: item.path,
-            content,
-          });
-        }
-      }
-      return files;
+      const response = await axios.post(`${this.serverUrl}/api/github/list-files`, {
+        owner,
+        repo,
+        folderPath,
+        branch,
+      });
+      return response.data;
     } catch (error) {
       console.error('Error listing files:', error);
       throw new Error('Failed to list files in folder');
@@ -98,16 +80,12 @@ export class GitHubService {
     filename: string
   ): Promise<string | null> {
     try {
-      const query = `repo:${owner}/${repo} filename:${filename}`;
-      const response = await axios.get(
-        `${this.baseURL}/search/code?q=${encodeURIComponent(query)}`,
-        { headers: this.getHeaders() }
-      );
-
-      if (response.data.items && response.data.items.length > 0) {
-        return response.data.items[0].path;
-      }
-      return null;
+      const response = await axios.post(`${this.serverUrl}/api/github/find-file`, {
+        owner,
+        repo,
+        filename,
+      });
+      return response.data.path || null;
     } catch (error) {
       console.error('Error finding file:', error);
       return null;
@@ -123,25 +101,14 @@ export class GitHubService {
     branch: string = 'main'
   ): Promise<boolean> {
     try {
-      const currentFile = await axios.get(
-        `${this.baseURL}/repos/${owner}/${repo}/contents/${filePath}?ref=${branch}`,
-        { headers: this.getHeaders() }
-      );
-
-      const sha = currentFile.data.sha;
-      const encodedContent = encode(content);
-
-      await axios.put(
-        `${this.baseURL}/repos/${owner}/${repo}/contents/${filePath}`,
-        {
-          message,
-          content: encodedContent,
-          sha,
-          branch,
-        },
-        { headers: this.getHeaders() }
-      );
-
+      await axios.post(`${this.serverUrl}/api/github/commit-and-push`, {
+        owner,
+        repo,
+        filePath,
+        content,
+        message,
+        branch,
+      });
       return true;
     } catch (error) {
       console.error('Error committing changes:', error);

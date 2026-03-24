@@ -35,8 +35,6 @@ export const useAppStore = create<AppStore>((set) => ({
   githubConfig: {
     repoUrl: '',
     branch: '',
-    token: '',
-    helpers: '',
   },
   generatedCode: null,
   loading: false,
@@ -64,9 +62,7 @@ export const useAppStore = create<AppStore>((set) => ({
       excelData: {},
       githubConfig: {
         repoUrl: '',
-        branch: '',
-        token: '',
-        helpers: '',
+        branch: ''
       },
       generatedCode: null,
     });
@@ -98,9 +94,7 @@ export const useAppStore = create<AppStore>((set) => ({
     set({
       githubConfig: {
         repoUrl: '',
-        branch: '',
-        token: '',
-        helpers: '',
+        branch: ''
       },
     });
   },

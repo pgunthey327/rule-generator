@@ -6,21 +6,17 @@ import '../styles/GitHubIntegration.css';
 
 export const GitHubIntegration = () => {
   const [repoUrl, setRepoUrl] = useState('');
-  const [token, setToken] = useState('');
   const [branches, setBranches] = useState<GitHubBranch[]>([]);
   const [selectedBranch, setSelectedBranch] = useState('');
-  const [helpersContent, setHelpersContent] = useState('');
-  const [ruleId, setRuleId] = useState('');
-  const [rulePath, setRulePath] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const setGitHubConfig = useAppStore((state) => state.setGitHubConfig);
 
   const handleFetchBranches = async () => {
-    if (!repoUrl || !token) {
-      logService.warning(`GitHub configuration incomplete`, `Missing repo URL or token`);
-      setError('Please enter both repository URL and token');
+    if (!repoUrl) {
+      logService.warning(`GitHub configuration incomplete`, `Missing repo URL`);
+      setError('Please enter repository URL');
       return;
     }
 
@@ -29,7 +25,7 @@ export const GitHubIntegration = () => {
     setError('');
 
     try {
-      const service = new GitHubService(token);
+      const service = new GitHubService();
       const parsed = service.parseRepoUrl(repoUrl);
 
       if (!parsed) {
@@ -42,94 +38,11 @@ export const GitHubIntegration = () => {
       setBranches(fetchedBranches);
       setGitHubConfig({
         repoUrl,
-        token,
       });
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to fetch branches';
       logService.error(`GitHub fetch failed`, errorMsg);
       setError(errorMsg);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleFetchHelpers = async () => {
-    if (!selectedBranch || !repoUrl || !token) {
-      logService.warning(`GitHub helpers fetch incomplete`, `Missing branch or credentials`);
-      setError('Please select a branch first');
-      return;
-    }
-
-    logService.debug(`Fetching helpers file`, `Branch: ${selectedBranch}`);
-    setLoading(true);
-    setError('');
-
-    try {
-      const service = new GitHubService(token);
-      const parsed = service.parseRepoUrl(repoUrl);
-
-      if (!parsed) {
-        throw new Error('Invalid GitHub URL format');
-      }
-
-      const files = await service.listFilesInFolder(
-        parsed.owner,
-        parsed.repo,
-        'definition/helpers',
-        selectedBranch
-      );
-
-      const concatenatedContent = files
-        .map((file) => `// File: ${file.path}\n${file.content}`)
-        .join('\n\n');
-      console.log('Fetched helpers content:', concatenatedContent);
-      setHelpersContent(concatenatedContent);
-      setGitHubConfig({
-        branch: selectedBranch,
-        helpers: concatenatedContent,
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch helpers folder');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleLocateRuleId = async () => {
-    if (!ruleId || !repoUrl || !token || !selectedBranch) {
-      setError('Please fill in rule ID and select a branch');
-      return;
-    }
-
-    setLoading(true);
-    setError('');
-
-    try {
-      const service = new GitHubService(token);
-      const parsed = service.parseRepoUrl(repoUrl);
-
-      if (!parsed) {
-        throw new Error('Invalid GitHub URL format');
-      }
-
-      const path = await service.findFile(parsed.owner, parsed.repo, `${ruleId}.js`);
-
-      if (path) {
-        setRulePath(path);
-        setGitHubConfig({
-          ruleId,
-          rulePath: path,
-        });
-      } else {
-        setRulePath('NA');
-        setGitHubConfig({
-          ruleId,
-          rulePath: 'NA',
-        });
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to locate rule file');
-      setRulePath('NA');
     } finally {
       setLoading(false);
     }
@@ -149,18 +62,6 @@ export const GitHubIntegration = () => {
             value={repoUrl}
             onChange={(e) => setRepoUrl(e.target.value)}
             placeholder="https://github.com/owner/repo"
-            className="form-input"
-          />
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="token">GitHub Personal Access Token</label>
-          <input
-            id="token"
-            type="password"
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-            placeholder="Enter your GitHub token"
             className="form-input"
           />
         </div>
@@ -189,22 +90,8 @@ export const GitHubIntegration = () => {
               ))}
             </select>
           </div>
-
-          <button onClick={handleFetchHelpers} disabled={loading || !selectedBranch} className="btn btn-primary">
-            {loading ? 'Loading...' : 'Load Helpers Folder'}
-          </button>
         </div>
       )}
-
-      {helpersContent && (
-        <div className="github-section">
-          <h3>Helpers Content</h3>
-          <div className="content-preview">
-            <pre>{helpersContent.substring(0, 500)}...</pre>
-          </div>
-          <p className="text-muted">{helpersContent.length} characters loaded</p>
-        </div>
-      )} 
 
       {error && <div className="error-message">{error}</div>}
     </div>

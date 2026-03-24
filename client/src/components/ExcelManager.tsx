@@ -12,7 +12,6 @@ export const ExcelManager = () => {
   const [activeExcelTab, setActiveExcelTab] = useState<1 | 2>(1);
   const [showDataModal, setShowDataModal] = useState(false);
   const [modalData, setModalData] = useState<any>(null);
-  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
   const file1Ref = useRef<HTMLInputElement>(null);
   const file2Ref = useRef<HTMLInputElement>(null);
 
@@ -21,7 +20,6 @@ export const ExcelManager = () => {
   const [branches, setBranches] = useState<GitHubBranch[]>([]);
   const [selectedBranch, setSelectedBranch] = useState('');
   const [lob, setLob] = useState('');
-  const [helpersContent, setHelpersContent] = useState('');
   const [gitHubLoading, setGitHubLoading] = useState(false);
 
   const excelData = useAppStore((state) => state.excelData);
@@ -29,12 +27,9 @@ export const ExcelManager = () => {
   const setGitHubConfig = useAppStore((state) => state.setGitHubConfig);
   const user = useAppStore((state) => state.user);
 
-  // Get tokens from environment variables
-  const GITHUB_TOKEN = import.meta.env.VITE_GITHUB_TOKEN || '';
-
   // Auto-fetch branches when repo URL changes
   useEffect(() => {
-    if (!repoUrl || !GITHUB_TOKEN) {
+    if (!repoUrl) {
       setBranches([]);
       setSelectedBranch('');
       return;
@@ -43,7 +38,7 @@ export const ExcelManager = () => {
     const fetchBranches = async () => {
       setGitHubLoading(true);
       try {
-        const service = new GitHubService(GITHUB_TOKEN);
+        const service = new GitHubService();
         const parsed = service.parseRepoUrl(repoUrl);
 
         if (!parsed) {
@@ -65,47 +60,14 @@ export const ExcelManager = () => {
 
     const timer = setTimeout(fetchBranches, 500); // Debounce to avoid too many requests
     return () => clearTimeout(timer);
-  }, [repoUrl, GITHUB_TOKEN]);
+  }, [repoUrl]);
 
   const handleBranchSelect = async (branchName: string) => {
-    setSelectedBranch(branchName);
-
-    if (!repoUrl || !GITHUB_TOKEN) return;
-
-    setGitHubLoading(true);
-    try {
-      const service = new GitHubService(GITHUB_TOKEN);
-      const parsed = service.parseRepoUrl(repoUrl);
-
-      if (!parsed) throw new Error('Invalid GitHub URL format');
-
-      // Fetch helpers content and store in state
-      const files = await service.listFilesInFolder(parsed.owner, parsed.repo, 'definition/helpers', branchName);
-      const concatenatedContent = files
-        .map((file) => `// File: ${file.path}\n${file.content}`)
-        .join('\n\n');
-console.log('Fetched helpers content:', concatenatedContent);
-      setHelpersContent(concatenatedContent);
+      setSelectedBranch(branchName);
       setGitHubConfig({
         branch: branchName,
-        helpers: concatenatedContent,
       });
-
-      logService.success('Helpers fetched', `Loaded ${files.length} helper files`);
-    } catch (err) {
-      logService.error('Failed to fetch branch content', err instanceof Error ? err.message : 'Unknown error');
-    } finally {
-      setGitHubLoading(false);
-    }
   };
-
-  // Kept for future use with Rule ID input
-  // const handleRuleSelect = (ruleId: string) => {
-  //   setSelectedRule(ruleId);
-  //   setGitHubConfig({
-  //     ruleId,
-  //   });
-  // };
 
   const handleLogExcelData = async () => {
     const restData = await getRestData();
@@ -123,7 +85,6 @@ console.log('Fetched helpers content:', concatenatedContent);
             refinedFile2,
             repoUrl,
             branch: selectedBranch,
-            helpers: helpersContent,
             lob,
             ...restData,
         };
@@ -139,22 +100,9 @@ console.log('Fetched helpers content:', concatenatedContent);
 
   }
 
-  const toggleExpanded = (key: string) => {
-    setExpandedKeys((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(key)) {
-        newSet.delete(key);
-      } else {
-        newSet.add(key);
-      }
-      return newSet;
-    });
-  };
-
   const closeModal = () => {
     setShowDataModal(false);
     setModalData(null);
-    setExpandedKeys(new Set());
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, fileNumber: 1 | 2) => {

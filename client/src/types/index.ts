@@ -28,10 +28,6 @@ export interface Rule {
 export interface GitHubConfig {
   repoUrl: string;
   branch: string;
-  token: string;
-  helpers: string;
-  ruleId?: string;
-  rulePath?: string;
 }
 
 export interface GenerateRuleRequest {
@@ -39,7 +35,6 @@ export interface GenerateRuleRequest {
   excel2Json: Record<string, any>[];
   oids: string[];
   lob: string;
-  helpersContent: string;
   ruleTemplate: Record<string, any>;
 }
 
