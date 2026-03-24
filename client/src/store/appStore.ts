@@ -33,8 +33,9 @@ export const useAppStore = create<AppStore>((set) => ({
   user: null,
   excelData: {},
   githubConfig: {
-    repoUrl: '',
+    ruleRepoUrl: '',
     branch: '',
+    ruleRepos: [], // Initialize with empty array
   },
   generatedCode: null,
   loading: false,
@@ -61,7 +62,7 @@ export const useAppStore = create<AppStore>((set) => ({
       user: null,
       excelData: {},
       githubConfig: {
-        repoUrl: '',
+        ruleRepoUrl: '',
         branch: ''
       },
       generatedCode: null,
@@ -93,7 +94,7 @@ export const useAppStore = create<AppStore>((set) => ({
   clearGitHubConfig: () => {
     set({
       githubConfig: {
-        repoUrl: '',
+        ruleRepoUrl: '',
         branch: ''
       },
     });

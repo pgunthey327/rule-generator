@@ -17,13 +17,14 @@ const router = Router();
  * POST /api/genai/extract-oids
  * Extract OIDs from Excel data using Gen AI
  */
-router.post('/extract-oids', async (req: Request, res: Response) => {
+router.post('/extract-oids-ugc', async (req: Request, res: Response) => {
   try {
-    const { excelJson } = req.body;
+    return res.json({ oids: ['X58231'], ugc: 'UGC123' });
+    const { spydrRule } = req.body;
     const apiKey = process.env.OPENAI_API_KEY;
 
-    if (!excelJson) {
-      return res.status(400).json({ error: 'Missing excelJson' });
+    if (!spydrRule) {
+      return res.status(400).json({ error: 'Missing spydrRule' });
     }
 
     if (!apiKey) {
@@ -31,16 +32,16 @@ router.post('/extract-oids', async (req: Request, res: Response) => {
     }
 
     const prompt = `
-      Analyze the following Excel data and extract all unique OID (Object Identifier) values.
-      Return them as a JSON array with "oids" key.
+      Analyze the following Excel data and extract ugc (UnderWriting Group Code) and all unique OID (Object Identifier) values.
+      Return them as a JSON array with "ugc" and "oids" keys.
       
       Data:
-      ${JSON.stringify(excelJson, null, 2)}
+      ${JSON.stringify(spydrRule, null, 2)}
       
       Response format:
       {
         "oids": ["OID1", "OID2", ...],
-        "explanation": "Brief explanation of OIDs found"
+        "ugc": "ugc1"
       }
     `;
 
@@ -60,42 +61,15 @@ router.post('/extract-oids', async (req: Request, res: Response) => {
  */
 router.post('/generate-code', async (req: Request, res: Response) => {
   try {
-    const { excelData1, filteredExcelData2, oids, lob } = req.body;
-    const apiKey = process.env.OPENAI_API_KEY;
-
-    if (!excelData1 || !filteredExcelData2 || !oids || !lob) {
-      return res.status(400).json({ error: 'Missing required parameters' });
-    }
-
-    if (!apiKey) {
-      return res.status(500).json({ error: 'Server missing OpenAI API key' });
-    }
+    const { ruleParsed, serviceParsed, context } = req.body;
 
     const prompt = `
-      Generate a business rule code based on the following data:
-      
-      Configuration (Excel 1):
-      ${JSON.stringify(excelData1, null, 2)}
-      
-      Filtered Rules (Excel 2 - matching OIDs, LOB: ${lob}):
-      ${JSON.stringify(filteredExcelData2, null, 2)}
-      
-      OIDs to Match: ${JSON.stringify(oids)}
-      
-      Generate JavaScript code that implements these rules.
-      Return as JSON with "code" and "explanation" keys.
-      
-      Response format:
-      {
-        "code": "// Generated code here",
-        "explanation": "What this code does"
-      }
     `;
 
-    const response = await callAI(prompt, apiKey);
-    const result = JSON.parse(response) as AIResponse;
+    // const response = await callAI(prompt, apiKey);
+    // const result = JSON.parse(JSON.stringify(req.body)) as AIResponse;
     
-    return res.json(result);
+    return res.json(req.body);
   } catch (error) {
     console.error('Error generating code:', error);
     return res.status(500).json({ error: 'Failed to generate code' });

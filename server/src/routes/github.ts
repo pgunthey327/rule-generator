@@ -57,6 +57,26 @@ router.post('/branches', async (req: Request, res: Response) => {
   }
 });
 
+router.post('/service-branches', async (req: Request, res: Response) => {
+  try {
+    const { owner, repo } = req.body;
+
+    if (!owner || !repo) {
+      return res.status(400).json({ error: 'Missing owner or repo' });
+    }
+
+    const response = await axios.get(
+      `${baseURL}/repos/${owner}/${repo}/branches`,
+      { headers: getHeaders() }
+    );
+
+    return res.json(response.data as GitHubBranch[]);
+  } catch (error) {
+    console.error('Error fetching branches:', error);
+    return res.status(500).json({ error: 'Failed to fetch branches from GitHub' });
+  }
+});
+
 /**
  * POST /api/github/file-content
  * Get file content from GitHub
@@ -222,6 +242,26 @@ router.post('/parse-url', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error parsing URL:', error);
     return res.status(500).json({ error: 'Failed to parse URL' });
+  }
+});
+
+router.post('/rule-repos', async (req: Request, res: Response) => {
+  try {
+    const token = process.env.GITHUB_TOKEN;
+    return res.json(['https://github.com/pgunthey/demorule']);
+  } catch (error) {
+        console.error('Error fetching rule repositories:', error);
+        return res.status(500).json({ error: 'Failed to fetch rule repositories' });
+  }
+});
+
+router.post('/service-repos', async (req: Request, res: Response) => {
+  try {
+    const token = process.env.GITHUB_TOKEN;
+    return res.json(['https://github.com/pgunthey/demoservice']);
+  } catch (error) {
+        console.error('Error fetching service repositories:', error);
+        return res.status(500).json({ error: 'Failed to fetch service repositories' });
   }
 });
 

@@ -6,6 +6,7 @@ import { logService } from '../services/logService';
 import type { ExcelData } from '../types';
 import '../styles/ExcelManager.css';
 import JsonView from '@uiw/react-json-view';
+import { GenAIService } from '../services/genAIService';
 
 export const ExcelManager = () => {
   const [loading, setLoading] = useState(false);
@@ -16,22 +17,41 @@ export const ExcelManager = () => {
   const file2Ref = useRef<HTMLInputElement>(null);
 
   // GitHub integration state
-  const [repoUrl, setRepoUrl] = useState('');
+  const [ruleRepoUrl, setRuleRepoUrl] = useState('');
   const [branches, setBranches] = useState<GitHubBranch[]>([]);
   const [selectedBranch, setSelectedBranch] = useState('');
+  const [serviceRepoUrl, setServiceRepoUrl] = useState('');
+  const [serviceBranches, setServiceBranches] = useState<GitHubBranch[]>([]);
+  const [selectedServiceBranch, setSelectedServiceBranch] = useState('');
   const [lob, setLob] = useState('');
   const [gitHubLoading, setGitHubLoading] = useState(false);
 
   const excelData = useAppStore((state) => state.excelData);
   const setExcelFile = useAppStore((state) => state.setExcelFile);
   const setGitHubConfig = useAppStore((state) => state.setGitHubConfig);
+  const githubConfig = useAppStore((state) => state.githubConfig);
   const user = useAppStore((state) => state.user);
+  const ruleRepos = useAppStore((state) => state.githubConfig.ruleRepos);
+  const serviceRepos = useAppStore((state) => state.githubConfig.serviceRepos);
+
+  useEffect(() => {
+    // Auto-fetch branches when repo URL changes
+    const service = new GitHubService();
+
+    const fetchRepos = async () => {
+      setGitHubLoading(true);
+      const ruleReposResp = await service.getRuleRepos();
+      const serviceReposResp = await service.getServiceRepos();
+      setGitHubConfig({...githubConfig,  ruleRepos: ruleReposResp, serviceRepos: serviceReposResp });
+      setGitHubLoading(false);
+    }
+    fetchRepos();
+  }, []);
 
   // Auto-fetch branches when repo URL changes
   useEffect(() => {
-    if (!repoUrl) {
+    if (!ruleRepoUrl) {
       setBranches([]);
-      setSelectedBranch('');
       return;
     }
 
@@ -39,10 +59,10 @@ export const ExcelManager = () => {
       setGitHubLoading(true);
       try {
         const service = new GitHubService();
-        const parsed = service.parseRepoUrl(repoUrl);
+        const parsed = service.parseRuleRepoUrl(ruleRepoUrl);
 
         if (!parsed) {
-          logService.warning('Invalid GitHub URL', `Cannot parse: ${repoUrl}`);
+          logService.warning('Invalid GitHub URL', `Cannot parse: ${ruleRepoUrl}`);
           setBranches([]);
           return;
         }
@@ -57,47 +77,119 @@ export const ExcelManager = () => {
         setGitHubLoading(false);
       }
     };
-
     const timer = setTimeout(fetchBranches, 500); // Debounce to avoid too many requests
     return () => clearTimeout(timer);
-  }, [repoUrl]);
+  }, [ruleRepoUrl]);
+
+  useEffect(() => {
+    if (!serviceRepoUrl) {
+      setServiceBranches([]);
+      return;
+    }
+
+    const fetchServiceBranches = async () => {
+      setGitHubLoading(true);
+      try {
+        const service = new GitHubService();
+        const parsed = service.parseServiceRepoUrl(serviceRepoUrl);
+
+        if (!parsed) {
+          logService.warning('Invalid GitHub URL', `Cannot parse: ${serviceRepoUrl}`);
+          setServiceBranches([]);
+          return;
+        }
+
+        const fetchedBranches = await service.getServiceBranches(parsed.owner, parsed.repo);
+        logService.success('GitHub branches fetched', `Found ${fetchedBranches.length} branches`);
+        setServiceBranches(fetchedBranches);
+      } catch (err) {
+        logService.error('GitHub fetch failed', err instanceof Error ? err.message : 'Unknown error');
+        setServiceBranches([]);
+      } finally {
+        setGitHubLoading(false);
+      }
+    };
+
+    const timer = setTimeout(fetchServiceBranches, 500); // Debounce to avoid too many requests
+    return () => clearTimeout(timer);
+  }, [serviceRepoUrl]);
 
   const handleBranchSelect = async (branchName: string) => {
       setSelectedBranch(branchName);
       setGitHubConfig({
+        ...githubConfig,
         branch: branchName,
       });
   };
+   const handleServiceBranchSelect = async (branchName: string) => {
+      setSelectedServiceBranch(branchName);
+      setGitHubConfig({
+        ...githubConfig,
+         serviceBranch: branchName,
+      });
+  };
+
+  const executeRuleGeneration = async () => {
+    setLoading(true);
+     const restData: any = await getRestData();
+    const refinedFile2 = Object.values(excelData.file2?.data || {}).filter(row => {
+            console.log(row[lob] === 'Y' , restData.oids[0].includes(row["Object Id"]) , row["Path Type"]);
+            return row[lob] === 'Y' && restData.oids[0].includes(row["Object Id"]) && (row["Path Type"] === 'SCBP BOM' || row["Path Type"] === 'SCBP XOM');
+        });
+    if(refinedFile2.length < 2){
+        
+    }
+    else{
+        const context = {
+            lob,
+            ruleRepoUrl,
+            serviceRepoUrl,
+            ruleBranch: selectedBranch,
+            serviceBranch: selectedServiceBranch,
+            spydrRule: excelData?.file1?.data[0],
+            filteredOsari: refinedFile2,
+            ...restData,
+        };
+        const genAIservice = new GenAIService();
+        const service = new GitHubService();
+        const ruleParsed = service.parseRuleRepoUrl(ruleRepoUrl);
+        const serviceParsed = service.parseServiceRepoUrl(serviceRepoUrl);
+        await genAIservice.generateRuleCode(ruleParsed, serviceParsed,context);
+        setLoading(false);
+        logService.info('Data viewer opened', `Total data size: ${JSON.stringify(context).length} characters`);
+    }
+  };
 
   const handleLogExcelData = async () => {
-    const restData = await getRestData();
+    const restData: any = await getRestData();
     const refinedFile2 = Object.values(excelData.file2?.data || {}).filter(row => {
-            console.log(row[lob] === 'Y' , restData.objectIdList[0].includes(row["Object Id"]) , row["Path Type"]);
-            return row[lob] === 'Y' && restData.objectIdList[0].includes(row["Object Id"]) && (row["Path Type"] === 'SCBP BOM' || row["Path Type"] === 'SCBP XOM');
+            console.log(row[lob] === 'Y' , restData.oids[0].includes(row["Object Id"]) , row["Path Type"]);
+            return row[lob] === 'Y' && restData.oids[0].includes(row["Object Id"]) && (row["Path Type"] === 'SCBP BOM' || row["Path Type"] === 'SCBP XOM');
         });
     if(refinedFile2.length < 2){
         
     }
     else{
         const dataToLog = {
-            file1: excelData.file1,
-            file2: excelData.file2,
-            refinedFile2,
-            repoUrl,
-            branch: selectedBranch,
             lob,
+            ruleRepoUrl,
+            serviceRepoUrl,
+            ruleBranch: selectedBranch,
+            serviceBranch: selectedServiceBranch,
+            spydrRule: excelData?.file1?.data[0],
+            filteredOsari: refinedFile2,
             ...restData,
         };
         setModalData(dataToLog);
         setShowDataModal(true);
         logService.info('Data viewer opened', `Total data size: ${JSON.stringify(dataToLog).length} characters`);
     }
-   
   };
 
   const getRestData = async () => {
-    return { objectIdList: ['X58231'], RuleId: '1000023' };
-
+    const genAIservice = new GenAIService();
+    const response =await genAIservice.getOIDAndRuleId(excelData.file1);
+    return response;
   }
 
   const closeModal = () => {
@@ -298,21 +390,27 @@ export const ExcelManager = () => {
         <div className="github-inputs-grid">
           {/* Top Left - Repo URL */}
           <div className="github-grid-item">
-            <label htmlFor="repo-url">Repository URL</label>
-            <input
-              id="repo-url"
-              type="text"
-              value={repoUrl}
-              onChange={(e) => setRepoUrl(e.target.value)}
-              placeholder="https://github.com/owner/repo"
-              disabled={gitHubLoading}
+            <label htmlFor="repo-url">Rule Repository URL</label>
+            <select
+              id="rule-repo-url-select"
+              value={ruleRepoUrl}
+              onChange={(e) => setRuleRepoUrl(e.target.value)}
               className="github-input"
-            />
+            >
+              <option value="">
+                {ruleRepos?.length === 0 ? 'Fetching...' : 'Select Rule Repo...'}
+              </option>
+               {ruleRepos?.map((repo: string) => (
+                <option key={repo} value={repo}>
+                  {repo}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Top Right - Branch */}
           <div className="github-grid-item">
-            <label htmlFor="branch-select">Branch</label>
+            <label htmlFor="branch-select">Rule Repo Branch</label>
             <select
               id="branch-select"
               value={selectedBranch}
@@ -330,6 +428,80 @@ export const ExcelManager = () => {
               ))}
             </select>
           </div>
+
+          <div className="github-grid-item">
+            <label htmlFor="repo-url">Service Repository URL</label>
+            <select
+              id="service-repo-url-select"
+              value={serviceRepoUrl}
+              onChange={(e) => setServiceRepoUrl(e.target.value)}
+              className="github-input"
+            >
+              <option value="">
+                {serviceRepos?.length === 0 ? 'Fetching...' : 'Select Service Repo...'}
+              </option>
+               {serviceRepos?.map((repo: string) => (
+                <option key={repo} value={repo}>
+                  {repo}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Top Right - Branch */}
+          <div className="github-grid-item">
+            <label htmlFor="branch-select">Service Repo Branch</label>
+            <select
+              id="branch-select"
+              value={selectedServiceBranch}
+              onChange={(e) => handleServiceBranchSelect(e.target.value)}
+              disabled={gitHubLoading || serviceBranches.length === 0}
+              className="github-select"
+            >
+              <option value="">
+                {serviceBranches.length === 0 ? 'Fetching...' : 'Select branch...'}
+              </option>
+              {serviceBranches?.map((branch: any) => (
+                <option key={branch.name} value={branch.name}>
+                  {branch.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+                {/* Excel Upload Section */}
+      <div className="github-grid-item">
+        <div className="file-upload-box">
+          <label htmlFor="file1-input">Excel File 1</label>
+          <input
+            id="file1-input"
+            ref={file1Ref}
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={(e) => handleFileUpload(e, 1)}
+            disabled={loading}
+            className="file-input"
+          />
+          {file1 && <span className="file-loaded">✓ {file1.name}</span>}
+        </div>
+</div>
+
+<div className="github-grid-item">
+        <div className="file-upload-box">
+          <label htmlFor="file2-input">Excel File 2</label>
+          <input
+            id="file2-input"
+            ref={file2Ref}
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={(e) => handleFileUpload(e, 2)}
+            disabled={loading}
+            className="file-input"
+          />
+          {file2 && <span className="file-loaded">✓ {file2.name}</span>}
+        </div>
+      </div>
+
 
           {/* Bottom Left - LOB Dropdown */}
           <div className="github-grid-item">
@@ -356,10 +528,10 @@ export const ExcelManager = () => {
                     className="btn btn-primary log-data-btn-grid"
                     style={{ alignSelf: 'flex-end', width: '100%', marginTop: '38px' }}
                     >
-                    📋 Log Excel Data
+                    📋 View Context
                 </button>
                 <button 
-                    onClick={handleLogExcelData} 
+                    onClick={executeRuleGeneration} 
                     className="btn btn-primary log-data-btn-grid"
                     style={{ alignSelf: 'flex-end', width: '100%', marginTop: '38px' , marginLeft: '20px'}}
                     >
@@ -371,36 +543,6 @@ export const ExcelManager = () => {
         </div>
       </div>
 
-      {/* Excel Upload Section */}
-      <div className="file-upload-section">
-        <div className="file-upload-box">
-          <label htmlFor="file1-input">Excel File 1</label>
-          <input
-            id="file1-input"
-            ref={file1Ref}
-            type="file"
-            accept=".xlsx,.xls"
-            onChange={(e) => handleFileUpload(e, 1)}
-            disabled={loading}
-            className="file-input"
-          />
-          {file1 && <span className="file-loaded">✓ {file1.name}</span>}
-        </div>
-
-        <div className="file-upload-box">
-          <label htmlFor="file2-input">Excel File 2</label>
-          <input
-            id="file2-input"
-            ref={file2Ref}
-            type="file"
-            accept=".xlsx,.xls"
-            onChange={(e) => handleFileUpload(e, 2)}
-            disabled={loading}
-            className="file-input"
-          />
-          {file2 && <span className="file-loaded">✓ {file2.name}</span>}
-        </div>
-      </div>
 
       {/* Excel Tabs Section */}
       {(file1 || file2) && (
@@ -430,6 +572,7 @@ export const ExcelManager = () => {
           </div>
         </div>
       )}
+
 
       {!file1 && !file2 && (
         <div className="empty-state">

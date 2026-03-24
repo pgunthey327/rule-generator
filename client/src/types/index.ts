@@ -26,8 +26,12 @@ export interface Rule {
 }
 
 export interface GitHubConfig {
-  repoUrl: string;
+  ruleRepoUrl: string;
   branch: string;
+  ruleRepos?: string[]; // List of available repos for dropdown
+  serviceRepos?: string[]; // List of available service repos for dropdown
+  serviceBranch?: string; // Selected service branch
+  serviceRepoUrl?: string; // Selected service repo URL
 }
 
 export interface GenerateRuleRequest {

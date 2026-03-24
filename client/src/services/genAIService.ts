@@ -39,25 +39,33 @@ export class GenAIService {
    * Generate code based on template and rules
    */
   async generateRuleCode(
-    excelData1: Record<string, any>[],
-    filteredExcelData2: Record<string, any>[],
-    oids: string[],
-    lob: string,
+    ruleParsed: any, serviceParsed: any, context: any 
   ): Promise<AIResponse> {
     try {
       const response = await axios.post(
         `${this.serverUrl}/api/genai/generate-code`,
         {
-          excelData1,
-          filteredExcelData2,
-          oids,
-          lob,
+          ruleParsed,
+          serviceParsed,
+          context,
         }
       );
       return response.data;
     } catch (error) {
       console.error('Error generating code:', error);
       throw new Error('Failed to generate code');
+    }
+  }
+
+  async  getOIDAndRuleId(spydrRule: any) {
+      try {
+      const response = await axios.post(`${this.serverUrl}/api/genai/extract-oids-ugc`, {
+        spydrRule
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching branches:', error);
+      throw new Error('Failed to fetch branches from GitHub');
     }
   }
 }

@@ -21,6 +21,26 @@ export class GitHubService {
     // No need to store token - server handles it
   }
 
+  async getRuleRepos(): Promise<string[]> {
+    try {
+      const response = await axios.post(`${this.serverUrl}/api/github/rule-repos`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching rule repos:', error);
+      throw new Error('Failed to fetch rule repos from GitHub');
+    }
+  }
+
+    async getServiceRepos(): Promise<string[]> {
+    try {
+      const response = await axios.post(`${this.serverUrl}/api/github/service-repos`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching service repos:', error);
+      throw new Error('Failed to fetch service repos from GitHub');
+    }
+  }
+
   async getBranches(owner: string, repo: string): Promise<GitHubBranch[]> {
     try {
       const response = await axios.post(`${this.serverUrl}/api/github/branches`, {
@@ -31,6 +51,19 @@ export class GitHubService {
     } catch (error) {
       console.error('Error fetching branches:', error);
       throw new Error('Failed to fetch branches from GitHub');
+    }
+  }
+
+    async getServiceBranches(owner: string, repo: string): Promise<GitHubBranch[]> {
+    try {
+      const response = await axios.post(`${this.serverUrl}/api/github/service-branches`, {
+        owner,
+        repo,
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching service branches:', error);
+      throw new Error('Failed to fetch service branches from GitHub');
     }
   }
 
@@ -116,7 +149,23 @@ export class GitHubService {
     }
   }
 
-  parseRepoUrl(url: string): { owner: string; repo: string } | null {
+  parseRuleRepoUrl(url: string): { owner: string; repo: string } | null {
+    try {
+      const urlObj = new URL(url);
+      const parts = urlObj.pathname.split('/').filter(Boolean);
+      if (parts.length >= 2) {
+        return {
+          owner: parts[0],
+          repo: parts[1].replace('.git', ''),
+        };
+      }
+    } catch (error) {
+      console.error('Invalid GitHub URL:', error);
+    }
+    return null;
+  }
+
+  parseServiceRepoUrl(url: string): { owner: string; repo: string } | null {
     try {
       const urlObj = new URL(url);
       const parts = urlObj.pathname.split('/').filter(Boolean);
