@@ -1,16 +1,11 @@
-import axios from 'axios';
 import { Router, Request, Response } from 'express';
 import { simpleGit } from "simple-git";
 import fs from "fs-extra";
 import path from "path";
-import crypto from "crypto";
-import { execSync } from "child_process";
 import { fileURLToPath } from 'url';
 
-interface AIResponse {
-  code: string;
-  explanation: string;
-}
+
+const OLLAMA_URL = "http://localhost:11434/api/generate";
 
 interface OIDExtractResponse {
   oids: string[];
@@ -25,16 +20,11 @@ const router = Router();
  */
 router.post('/extract-oids-ugc', async (req: Request, res: Response) => {
   try {
-    return res.json({ oids: ['X58231'], ugc: '10000016' });
+    // return res.json({ oids: ['X58231'], ugc: '10000016' });
     const { spydrRule } = req.body;
-    const apiKey = process.env.OPENAI_API_KEY;
 
     if (!spydrRule) {
       return res.status(400).json({ error: 'Missing spydrRule' });
-    }
-
-    if (!apiKey) {
-      return res.status(500).json({ error: 'Server missing OpenAI API key' });
     }
 
     const prompt = `
@@ -51,7 +41,8 @@ router.post('/extract-oids-ugc', async (req: Request, res: Response) => {
       }
     `;
 
-    const response = await callAI(prompt, apiKey);
+    const response = await callAI(prompt);
+    console.log('Raw AI response:', response);
     const result = JSON.parse(response) as OIDExtractResponse;
     
     return res.json(result);
@@ -85,43 +76,20 @@ router.post('/generate-code', async (req: Request, res: Response) => {
 /**
  * Internal method to call AI API
  */
-async function callAI(prompt: string, apiKey: string): Promise<string> {
-  try {
-    const apiUrl = 'https://api.openai.com/v1/chat/completions';
-    
-    const response = await axios.post(
-      apiUrl,
-      {
-        model: 'gpt-3.5-turbo',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are an expert business rules engine developer.',
-          },
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-        temperature: 0.3,
-        max_tokens: 2000,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
+async function callAI(prompt: string): Promise<string> {
+    const response = await fetch(OLLAMA_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "qwen3:0.6b",
+      prompt: prompt,
+      stream: false
+    })
+  });
 
-    if (response.data.choices && response.data.choices.length > 0) {
-      return response.data.choices[0].message.content;
-    }
-    throw new Error('No response from AI service');
-  } catch (error) {
-    console.error('Error calling AI service:', error);
-    throw error;
-  }
+  const raw: any = await response.json();
+  const resp = raw.response.replace(/^```json\s*/, '').replace(/```$/, '');
+  return resp;
 }
 
 /**
