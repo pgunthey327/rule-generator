@@ -140,8 +140,12 @@ export const ExcelManager = () => {
         
     }
     else{
+        const service = new GitHubService();
+        const ruleParsed = service.parseRuleRepoUrl(ruleRepoUrl);
+        const serviceParsed = service.parseServiceRepoUrl(serviceRepoUrl);
         const context = {
             lob,
+            ruleOwner: ruleParsed?.owner,
             ruleRepoUrl,
             serviceRepoUrl,
             ruleBranch: selectedBranch,
@@ -151,9 +155,6 @@ export const ExcelManager = () => {
             ...restData,
         };
         const genAIservice = new GenAIService();
-        const service = new GitHubService();
-        const ruleParsed = service.parseRuleRepoUrl(ruleRepoUrl);
-        const serviceParsed = service.parseServiceRepoUrl(serviceRepoUrl);
         await genAIservice.generateRuleCode(ruleParsed, serviceParsed,context);
         setLoading(false);
         logService.info('Data viewer opened', `Total data size: ${JSON.stringify(context).length} characters`);

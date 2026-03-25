@@ -295,6 +295,7 @@
 
 .excel-table th {
   padding: 0.85rem;
+  width: 240px;
   text-align: left;
   font-weight: 700;
   color: var(--gray-900);
