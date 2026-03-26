@@ -84,10 +84,11 @@ REQUIRED OUTPUT (raw JSON only, no explanation, no markdown):
     }
 
     console.log('All chunks processed. Reconstructing repo and pushing to new branch...');
-    const newBranch = await reconstructAndPushRepo(UpdatedFilesWithPath, context, tempDir);
+    const { branch: newBranch, prUrl } = await reconstructAndPushRepo(UpdatedFilesWithPath, context, tempDir);
     console.log(`Successfully pushed to branch: ${newBranch}`);
+    console.log(`Pull request raised: ${prUrl}`);
 
-    return res.json({ files: UpdatedFilesWithPath, branch: newBranch });
+    return res.json({ files: UpdatedFilesWithPath, branch: newBranch, prUrl });
   } catch (error) {
     console.error('Error generating code:', error);
     return res.status(500).json({ error: 'Failed to generate code' });
@@ -200,19 +201,20 @@ async function fetchRepoFiles(context: any): Promise<{
 
 /**
  * Write the AI-updated files back into the cloned repo, create a new branch,
- * commit all changes, and push to the remote.
+ * commit all changes, push to the remote, and open a pull request targeting
+ * `context.ruleRepoBranch`.
  *
  * @param updatedFiles - Array of `{ "<filePath>": "<fileContent>" }` objects from the AI.
- * @param context      - Original request context (used for repo URL and branch naming).
+ * @param context      - Original request context (used for repo URL, branch naming, and PR base).
  * @param tempDir      - Path to the local clone produced by fetchRepoFiles.
- * @returns The name of the newly created remote branch.
+ * @returns An object containing the new branch name and the URL of the created PR.
  */
 async function reconstructAndPushRepo(
   updatedFiles: Array<Record<string, string>>,
   context: any,
   tempDir: string,
-): Promise<string> {
-  const { ruleRepoUrl, ugc } = context;
+): Promise<{ branch: string; prUrl: string }> {
+  const { ruleRepoUrl, ruleRepoBranch, ugc } = context;
   const githubToken = process.env.GITHUB_TOKEN;
 
   const newBranch = `generated/${ugc ?? 'code'}-${Date.now()}`;
@@ -242,7 +244,61 @@ async function reconstructAndPushRepo(
   // 4. Clean up the local clone now that the push succeeded.
   await fs.remove(tempDir).catch(() => {});
 
-  return newBranch;
+  // 5. Raise a pull request from the new branch to ruleRepoBranch via the GitHub API.
+  const prUrl = await createPullRequest({
+    repoUrl: ruleRepoUrl,
+    headBranch: newBranch,
+    baseBranch: ruleRepoBranch ?? 'main',
+    title: `chore: generated code for ${ugc ?? 'rule'}`,
+    body: `Auto-generated PR for UGC \`${ugc ?? 'rule'}\`.\n\nSource branch: \`${newBranch}\``,
+    githubToken,
+  });
+
+  return { branch: newBranch, prUrl };
+}
+
+/**
+ * Create a GitHub pull request using the REST API.
+ *
+ * @returns The HTML URL of the created pull request.
+ */
+async function createPullRequest(options: {
+  repoUrl: string;
+  headBranch: string;
+  baseBranch: string;
+  title: string;
+  body: string;
+  githubToken: string | undefined;
+}): Promise<string> {
+  const { repoUrl, headBranch, baseBranch, title, body, githubToken } = options;
+
+  // Derive "{owner}/{repo}" from the GitHub URL (strips optional .git suffix).
+  const match = repoUrl.match(/github\.com[/:]([^/]+\/[^/]+?)(?:\.git)?$/);
+  if (!match) {
+    throw new Error(`Cannot parse GitHub owner/repo from URL: ${repoUrl}`);
+  }
+  const ownerRepo = match[1];
+
+  const apiUrl = `https://api.github.com/repos/${ownerRepo}/pulls`;
+
+  const response = await fetch(apiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/vnd.github+json',
+      ...(githubToken ? { Authorization: `Bearer ${githubToken}` } : {}),
+    },
+    body: JSON.stringify({ title, body, head: headBranch, base: baseBranch }),
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`GitHub PR creation failed (${response.status}): ${err}`);
+  }
+
+  const pr: any = await response.json();
+  console.log(`Pull request created: ${pr.html_url}`);
+  return pr.html_url as string;
 }
 
 export default router;

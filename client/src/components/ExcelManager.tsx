@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useAppStore } from '../store/appStore';
 import { readExcelFile, convertJsonToExcel, updateCellValue, addRow, deleteRow, addColumn, deleteColumn } from '../utils/excelUtils';
 import { GitHubService, type GitHubBranch } from '../services/githubService';
@@ -8,8 +8,18 @@ import '../styles/ExcelManager.css';
 import JsonView from '@uiw/react-json-view';
 import { GenAIService } from '../services/genAIService';
 
+type ToastType = 'success' | 'error';
+interface ToastItem { id: number; message: string; type: ToastType; }
+
 export const ExcelManager = () => {
   const [loading, setLoading] = useState(false);
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+
+  const showToast = useCallback((message: string, type: ToastType) => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3500);
+  }, []);
   const [activeExcelTab, setActiveExcelTab] = useState<1 | 2>(1);
   const [showDataModal, setShowDataModal] = useState(false);
   const [modalData, setModalData] = useState<any>(null);
@@ -155,10 +165,11 @@ export const ExcelManager = () => {
             ...restData,
         };
         const genAIservice = new GenAIService();
-        await genAIservice.generateRuleCode(ruleParsed, serviceParsed,context);
+        genAIservice.generateRuleCode(ruleParsed, serviceParsed,context);
         setLoading(false);
         logService.info('Data viewer opened', `Total data size: ${JSON.stringify(context).length} characters`);
     }
+      showToast(`Rule generation started`, 'success');
   };
 
   const handleLogExcelData = async () => {
@@ -213,10 +224,10 @@ export const ExcelManager = () => {
       };
       setExcelFile(fileNumber, excelDataObj);
       logService.success(`Excel file uploaded successfully`, `File ${fileNumber}: ${data.data.length} rows, ${data.headers.length} columns`);
-      alert(`File ${fileNumber} loaded successfully`);
+      showToast(`File ${fileNumber} loaded successfully`, 'success');
     } catch (error) {
       logService.error(`Excel file upload failed`, `Error: ${error}`);
-      alert(`Error loading file: ${error}`);
+      showToast(`Error loading file: ${error}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -615,6 +626,16 @@ export const ExcelManager = () => {
           </div>
         </div>
       )}
+
+      {/* Toast notifications */}
+      <div className="toast-container">
+        {toasts.map(t => (
+          <div key={t.id} className={`toast toast-${t.type}`}>
+            <span className="toast-icon">{t.type === 'success' ? '✅' : '❌'}</span>
+            {t.message}
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
