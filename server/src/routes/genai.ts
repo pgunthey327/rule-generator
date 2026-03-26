@@ -12,6 +12,11 @@ interface OIDExtractResponse {
   explanation: string;
 }
 
+interface AIResponse {
+  code: string;
+  explanation: string;
+}
+
 const router = Router();
 
 /**
@@ -58,15 +63,54 @@ router.post('/extract-oids-ugc', async (req: Request, res: Response) => {
  */
 router.post('/generate-code', async (req: Request, res: Response) => {
   try {
-    const { ruleParsed, serviceParsed, context } = req.body;
+    const { context } = req.body;
+    const {helperFiles, repoFiles} = await fetchRepoFiles(context);
+    const chunkSize: number  = 20;
 
-    const prompt = `
+    const newRepoFiles = [];
+    const AttributeNamesPath = context.filteredOsari.map((item: any) => {
+      return item.path;
+    });
+
+    for (let i: number = 0; i < repoFiles.length; i += chunkSize) {
+      const chunk = repoFiles.slice(i, i + chunkSize);
+      console.log(`Processing chunk ${i / chunkSize + 1}...`);
+
+      const inputContext = {
+          'FilesWithPath': JSON.stringify(chunk, null, 2),
+          'HelpersWithPath': JSON.stringify(helperFiles, null, 2),
+          'FunctionDefinition': JSON.stringify(context?.spydrRule, null, 2),
+          'AttributeNamePath': JSON.stringify(AttributeNamesPath, null, 2),
+          'FunctionFileName': JSON.stringify(context?.ugc, null, 2)
+      }
+
+      const prompt = `
+        You are a code assistant. Using the context provided below, perform the following tasks:
+          1) Read the function definition from FunctionDefinition.
+          2) Locate the file named in FunctionFileName and update the function’s implementation in FileswithPath based on the logic defined in FunctionDefinition.
+          3) Use helper functions if available in HelpersWithPath to simplify or optimize the function.
+          4) Manage attributes:
+          5) Use existing attributes from Paths listed in AttributeNamesPath.
+          6) Create any new attributes required by the function if they do not already exist.
+          7) Ensure new attribute names are meaningful and follow the existing naming conventions.
+          8) Ensure the function logic aligns with the context provided in FunctionDefinition.
+          9) Maintain coding style consistent with the file content.
+          10)Return the updated FilesWithPath, in the same format it is present in context.
+
+          CONTEXT:
+          ${JSON.stringify(inputContext, null, 2)}
     `;
 
-    // const response = await callAI(prompt, apiKey);
-    // const result = JSON.parse(JSON.stringify(req.body)) as AIResponse;
-    const response = await fetchRepoFiles(context);
-    return res.json(response);
+    console.log('Prompt sent to AI:', prompt);
+      const updatedChunk = await callAI(prompt);
+
+      // Add updated chunk to newRepoFiles
+      newRepoFiles.push(updatedChunk);
+
+      console.log('Updated chunk:', updatedChunk);
+      console.log('-------------------------');
+    }
+    return res.json(newRepoFiles);
   } catch (error) {
     console.error('Error generating code:', error);
     return res.status(500).json({ error: 'Failed to generate code' });
@@ -97,7 +141,7 @@ async function callAI(prompt: string): Promise<string> {
  */
 async function fetchRepoFiles(
   context: any
-): Promise<{ repoObject: Record<string, string>; helpers: Record<string, string> }> {
+): Promise<{ repoFiles: Array<{ path: string; content: string }>; helperFiles: Array<{ path: string; content: string }> }> {
   const { ruleOwner, ruleBranch, ruleRepoUrl } = context;
   const githubToken = process.env.GITHUB_TOKEN;
   const __filename = fileURLToPath(import.meta.url);
@@ -128,17 +172,17 @@ async function fetchRepoFiles(
   console.log(`Found ${files.length} files`);
 
   // ✅ Build object
-  const repoObject: Record<string, string> = {};
-  const helpers: Record<string, string> = {};
+  const repoObject: any = [];
+  const helpers: any = [];
 
   for (const file of files) {
     const content = await fs.readFile(path.join(TEMP_DIR, file), "utf-8");
     if(file.includes("helpers")){
-      helpers[file] = content;
+      helpers.push({ path: file, content });
     }
-    repoObject[file] = content;
+    repoObject.push({ path: file, content });
   } 
-  return { repoObject, helpers };
+  return { repoFiles: repoObject, helperFiles: helpers };
 } catch (error) {
     // Cleanup on error
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
