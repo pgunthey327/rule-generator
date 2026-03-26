@@ -247,8 +247,7 @@ router.post('/parse-url', async (req: Request, res: Response) => {
 
 router.post('/rule-repos', async (req: Request, res: Response) => {
   try {
-    const token = process.env.GITHUB_TOKEN;
-    return res.json(['https://github.com/pgunthey/demorule']);
+    return res.json(['https://github.com/pgunthey327/demorule']);
   } catch (error) {
         console.error('Error fetching rule repositories:', error);
         return res.status(500).json({ error: 'Failed to fetch rule repositories' });
@@ -257,8 +256,7 @@ router.post('/rule-repos', async (req: Request, res: Response) => {
 
 router.post('/service-repos', async (req: Request, res: Response) => {
   try {
-    const token = process.env.GITHUB_TOKEN;
-    return res.json(['https://github.com/pgunthey/demoservice']);
+    return res.json(['https://github.com/pgunthey327/demoservice']);
   } catch (error) {
         console.error('Error fetching service repositories:', error);
         return res.status(500).json({ error: 'Failed to fetch service repositories' });

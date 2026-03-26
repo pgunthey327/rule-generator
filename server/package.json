@@ -7,10 +7,13 @@
   "scripts": {
     "start": "node --loader ts-node/esm src/index.ts",
     "dev": "nodemon --exec node --loader ts-node/esm src/index.ts",
+    "agent": "node --loader ts-node/esm src/run-agent.ts",
     "build": "tsc",
     "lint": "eslint src"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.84",
+    "@anthropic-ai/sdk": "^0.80.0",
     "axios": "^1.13.6",
     "cors": "^2.8.5",
     "dotenv": "^17.3.1",
