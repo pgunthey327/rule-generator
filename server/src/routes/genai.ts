@@ -59,23 +59,49 @@ router.post('/generate-code', async (req: Request, res: Response) => {
       const chunk = repoFiles.slice(i, i + CHUNK_SIZE);
       console.log(`Processing chunk ${Math.floor(i / CHUNK_SIZE) + 1} of ${Math.ceil(repoFiles.length / CHUNK_SIZE)}...`);
 
-      const prompt = `You are a code generation engine. Update the files in FilesWithPath according to the instructions below.
+      const prompt = `You are a deterministic code generation engine. Process the inputs below and return ALL files in the required output format.
 
-INSTRUCTIONS:
-1. Read FunctionDefinition and implement its logic in the file named by FunctionFileName inside FilesWithPath.
-2. Use helper functions from HelpersWithPath where applicable.
-3. Reuse attributes listed in AttributeNamePath; create new ones only when necessary, following existing naming conventions.
-4. Keep the coding style consistent with the existing file content.
-5. Return ALL files from FilesWithPath — modified or not — in the exact response format below.
+━━━ RULES ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-CONTEXT:
-FilesWithPath: ${JSON.stringify(chunk)}
-HelpersWithPath: ${JSON.stringify(helperFiles)}
+RULE 1 — TARGET FILE RESOLUTION
+  a. Search FilesWithPath for a file whose name matches FunctionFileName.
+  b. IF a match is found  → implement FunctionDefinition inside that file; do NOT create or modify any other file.
+  c. IF no match is found → create a new file named exactly FunctionFileName:
+       • Implement FunctionDefinition in this new file only.
+       • Find the existing file in FilesWithPath most similar in name or functionality.
+       • Place the new file in that file's directory and construct its full path accordingly.
+       • File content must contain only the implemented function — no prose or extra comments.
+       • Leave every existing file unchanged.
+
+RULE 2 — HELPERS
+  • Reuse functions from HelpersWithPath wherever applicable.
+  • Do NOT duplicate helper logic inline.
+
+RULE 3 — ATTRIBUTES
+  • Prefer attribute paths listed in AttributeNamePath.
+  • Create new attributes only when strictly required, following existing naming conventions.
+
+RULE 4 — CODING STYLE
+  • Match the indentation, formatting, and code style of each file exactly.
+
+RULE 5 — OUTPUT COMPLETENESS
+  • Return EVERY file from FilesWithPath — modified, newly created, or unchanged.
+  • Do NOT omit any file.
+
+━━━ INPUT ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FilesWithPath:      ${JSON.stringify(chunk)}
+HelpersWithPath:    ${JSON.stringify(helperFiles)}
 FunctionDefinition: ${JSON.stringify(context?.spydrRule)}
-AttributeNamePath: ${JSON.stringify(attributeNamePaths)}
-FunctionFileName: ${JSON.stringify(context?.ugc)}
+AttributeNamePath:  ${JSON.stringify(attributeNamePaths)}
+FunctionFileName:   ${JSON.stringify(context?.ugc)}
 
-REQUIRED OUTPUT (raw JSON only, no explanation, no markdown):
+━━━ REQUIRED OUTPUT ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Raw JSON array only — no markdown, no code fences, no explanation.
+Each element is a single-key object: { "<filePath>": "<fullFileContent>" }.
+Every file in FilesWithPath must appear as its own element.
+
 [{"<path1>":"<filecontent1>"},{"<path2>":"<filecontent2>"}]`;
 
       const UpdatedChunk = await callAI(prompt);
