@@ -103,7 +103,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route path="/dashboard" element={true? <Dashboard /> : <Navigate to="/login" />} />
+        <Route path="/dashboard" element={user?.isAuthenticated? <Dashboard /> : <Navigate to="/login" />} />
         <Route path="/" element={user?.isAuthenticated ? <Navigate to="/dashboard" /> : <Navigate to="/login" />} />
       </Routes>
     </BrowserRouter>
