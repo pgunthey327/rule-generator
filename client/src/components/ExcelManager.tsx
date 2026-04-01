@@ -143,8 +143,8 @@ export const ExcelManager = () => {
     setLoading(true);
      const restData: any = await getRestData();
     const refinedFile2 = Object.values(excelData.file2?.data || {}).filter(row => {
-            console.log(row[lob] === 'Y' , restData.oids[0].includes(row["Object Id"]) , row["Path Type"]);
-            return row[lob] === 'Y' && restData.oids[0].includes(row["Object Id"]) && (row["Path Type"] === 'SCBP BOM' || row["Path Type"] === 'SCBP XOM');
+            console.log(row[lob] === 'Y' , restData.oids.includes(row["Object Id"]) , row["Path Type"]);
+            return row[lob] === 'Y' && restData.oids.includes(row["Object Id"]) && (row["Path Type"] === 'SCBP BOM' || row["Path Type"] === 'SCBP XOM');
         });
     if(refinedFile2.length < 2){
         
@@ -175,8 +175,8 @@ export const ExcelManager = () => {
   const handleLogExcelData = async () => {
     const restData: any = await getRestData();
     const refinedFile2 = Object.values(excelData.file2?.data || {}).filter(row => {
-            console.log(row[lob] === 'Y' , restData.oids[0].includes(row["Object Id"]) , row["Path Type"]);
-            return row[lob] === 'Y' && restData.oids[0].includes(row["Object Id"]) && (row["Path Type"] === 'SCBP BOM' || row["Path Type"] === 'SCBP XOM');
+            console.log(row[lob] === 'Y' , restData.oids.includes(row["Object Id"]) , row["Path Type"]);
+            return row[lob] === 'Y' && restData.oids.includes(row["Object Id"]) && (row["Path Type"] === 'SCBP BOM' || row["Path Type"] === 'SCBP XOM');
         });
     if(refinedFile2.length < 2){
         

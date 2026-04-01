@@ -25,7 +25,7 @@ router.post('/extract-oids-ugc', async (req: Request, res: Response) => {
   }
 
   try {
-    const prompt = `Extract the ugc (UnderWriting Group Code) and all unique OID (Object Identifier) values from the data below.
+    const prompt = `Extract the ugc (UnderWriting Group Code) and list of all unique OID (all Object IDs) values from the data below.
 
 DATA:
 ${JSON.stringify(spydrRule)}
@@ -45,10 +45,51 @@ REQUIRED OUTPUT (raw JSON only, no explanation):
 /**
  * POST /api/genai/generate-code
  * Generate / update code based on template and rules, then push to a new branch.
+ *
+ * Service-repo update logic:
+ *   • If filteredOsari has NO XOM path → also update the service repo transformation
+ *     using the BOM paths present in filteredOsari.
+ *   • If filteredOsari has BOTH XOM and BOM paths → current rules-repo-only logic runs.
  */
 router.post('/generate-code', async (req: Request, res: Response) => {
   try {
     const { context } = req.body;
+    const grouped = {};
+
+context.filteredOsari.forEach(item => {
+  const id = item["Object Id"];
+  const type = item["Path Type"].toLowerCase();
+
+  if (!grouped[id]) {
+    grouped[id] = {};
+  }
+  grouped[id][type] = true;
+});
+
+// Step 2: Filter
+const bomPaths = context.filteredOsari.filter(item => {
+  const types = grouped[item["Object Id"]];
+  return !(types["bom"] && types["xom"]);
+});
+
+  let serviceBranch: string | undefined;
+    let servicePrUrl: string | undefined;
+
+   if(bomPaths.length > 0){
+
+  
+      const serviceResult = await updateServiceRepo(context, bomPaths);
+      serviceBranch = serviceResult.branch;
+      servicePrUrl = serviceResult.prUrl;
+      console.log(`Service repo updated. Branch: ${serviceBranch}`);
+      console.log(`Service repo PR: ${servicePrUrl}`);
+    } else {
+      console.log('No BOM-only objects found in filteredOsari — skipping service repo update.');
+    }
+
+
+
+    // ── Update rules repo (always) ────────────────────────────────────────────
     const { helperFiles, repoFiles, tempDir } = await fetchRepoFiles(context);
     const CHUNK_SIZE = 20;
 
@@ -114,7 +155,14 @@ Every file in FilesWithPath must appear as its own element.
     console.log(`Successfully pushed to branch: ${newBranch}`);
     console.log(`Pull request raised: ${prUrl}`);
 
-    return res.json({ files: UpdatedFilesWithPath, branch: newBranch, prUrl });
+
+
+    return res.json({
+      files: UpdatedFilesWithPath,
+      branch: newBranch,
+      prUrl,
+      ...(serviceBranch ? { serviceBranch, servicePrUrl } : {}),
+    });
   } catch (error) {
     console.error('Error generating code:', error);
     return res.status(500).json({ error: 'Failed to generate code' });
@@ -325,6 +373,190 @@ async function createPullRequest(options: {
   const pr: any = await response.json();
   console.log(`Pull request created: ${pr.html_url}`);
   return pr.html_url as string;
+}
+
+// ─── Service-repo helpers ─────────────────────────────────────────────────────
+
+/**
+ * Clone the service repository and return its files split into repo files and
+ * helper files, along with the path to the local clone.
+ *
+ * Expects `context.serviceRepoUrl` and `context.serviceBranch`.
+ */
+async function fetchServiceRepoFiles(context: any): Promise<{
+  repoFiles: Array<{ path: string; content: string }>;
+  helperFiles: Array<{ path: string; content: string }>;
+  tempDir: string;
+}> {
+  const { serviceBranch, serviceRepoUrl } = context;
+  const githubToken = process.env.GITHUB_TOKEN;
+
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  const TEMP_DIR = path.join(__dirname, 'service-repo');
+
+  const repoUrl = githubToken
+    ? serviceRepoUrl.replace('https://github.com/', `https://${githubToken}@github.com/`)
+    : serviceRepoUrl;
+
+  try {
+    const git = simpleGit();
+    await fs.remove(TEMP_DIR);
+
+    console.log('Cloning service repository...');
+    await git.clone(repoUrl, TEMP_DIR, ['--branch', serviceBranch ?? 'main', '--depth', '1']);
+
+    const repoGit = simpleGit(TEMP_DIR);
+    const filesRaw = await repoGit.raw(['ls-files']);
+    const files = filesRaw.split('\n').filter(Boolean);
+
+    console.log(`Found ${files.length} service repo files`);
+
+    const repoFiles: Array<{ path: string; content: string }> = [];
+    const helperFiles: Array<{ path: string; content: string }> = [];
+
+    for (const file of files) {
+      const content = await fs.readFile(path.join(TEMP_DIR, file), 'utf-8');
+      const entry = { path: file, content };
+      repoFiles.push(entry);
+      if (file.includes('helpers')) {
+        helperFiles.push(entry);
+      }
+    }
+
+    return { repoFiles, helperFiles, tempDir: TEMP_DIR };
+  } catch (error) {
+    await fs.remove(TEMP_DIR).catch(() => {});
+    console.error('Error fetching service repository files:', error);
+    throw error;
+  }
+}
+
+/**
+ * Use AI to update the service repo's transformation code so it resolves
+ * attributes via BOM paths (instead of the absent XOM path), then push the
+ * result to a new branch and open a pull request.
+ *
+ * @param context  - Original request context.
+ * @param bomPaths - BOM attribute paths extracted from filteredOsari.
+ */
+async function updateServiceRepo(
+  context: any,
+  bomPaths: string[],
+): Promise<{ branch: string; prUrl: string }> {
+  const { repoFiles, tempDir } = await fetchServiceRepoFiles(context);
+  const CHUNK_SIZE = 20;
+  const updatedServiceFiles: Array<Record<string, string>> = [];
+
+  for (let i = 0; i < repoFiles.length; i += CHUNK_SIZE) {
+    const chunk = repoFiles.slice(i, i + CHUNK_SIZE);
+    console.log(
+      `Processing service repo chunk ${Math.floor(i / CHUNK_SIZE) + 1} ` +
+        `of ${Math.ceil(repoFiles.length / CHUNK_SIZE)}...`,
+    );
+
+    const prompt = `You are a deterministic code generation engine. Update the transformation code to transofrm BOM to XOM.
+
+━━━ CONTEXT ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+The XOM path is absent for this rule. Update any transformation logic for it in respective files passed
+
+━━━ RULES ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+RULE 1 — TARGET FILE RESOLUTION
+  a. Identify transformation-related files and xslt files in FilesWithPath 
+  b. Add transformation for BomAttributePaths passed in input by understaning the already implemented logic in the file
+
+RULE 2 — ATTRIBUTES
+  a. Follow existing naming conventions when introducing new identifiers.
+
+RULE 3 — CODING STYLE
+  a. Match the indentation, formatting, and code style of each file exactly.
+
+RULE 4 — OUTPUT COMPLETENESS
+  a. Return EVERY file from FilesWithPath — modified or unchanged.
+  b. Do NOT omit any file.
+
+━━━ INPUT ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FilesWithPath:      ${JSON.stringify(chunk)}
+BomAttributePaths:  ${JSON.stringify(bomPaths)}
+
+━━━ REQUIRED OUTPUT ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Raw JSON array only — no markdown, no code fences, no explanation.
+Each element is a single-key object: { "<filePath>": "<fullFileContent>" }.
+Every file in FilesWithPath must appear as its own element.
+
+[{"<path1>":"<filecontent1>"},{"<path2>":"<filecontent2>"}]`;
+
+    const updatedChunk = await callAI(prompt);
+    updatedServiceFiles.push(...parseJSON<Array<Record<string, string>>>(updatedChunk));
+    console.log(`Service repo chunk ${Math.floor(i / CHUNK_SIZE) + 1} done.`);
+  }
+console.log('updatedServiceFiles:', updatedServiceFiles);
+console.log('repoFiles:', repoFiles);
+  return reconstructAndPushServiceRepo(updatedServiceFiles, context, tempDir);
+}
+
+/**
+ * Write the AI-updated transformation files back into the cloned service repo,
+ * create a new branch, commit, push to the remote, and open a pull request
+ * targeting `context.serviceRepoBranch`.
+ *
+ * @param updatedFiles - Array of `{ "<filePath>": "<fileContent>" }` objects from the AI.
+ * @param context      - Original request context.
+ * @param tempDir      - Path to the local service-repo clone.
+ * @returns An object containing the new branch name and the URL of the created PR.
+ */
+async function reconstructAndPushServiceRepo(
+  updatedFiles: Array<Record<string, string>>,
+  context: any,
+  tempDir: string,
+): Promise<{ branch: string; prUrl: string }> {
+  const { serviceRepoUrl, serviceBranch, ugc } = context;
+  const githubToken = process.env.GITHUB_TOKEN;
+
+  const newBranch = `generated/${ugc ?? 'code'}-transformation-${Date.now()}`;
+
+  // 1. Write every updated file back into the working tree.
+  for (const fileObj of updatedFiles) {
+    for (const [filePath, content] of Object.entries(fileObj)) {
+      const fullPath = path.join(tempDir, filePath);
+      await fs.ensureDir(path.dirname(fullPath));
+      await fs.writeFile(fullPath, content, 'utf-8');
+    }
+  }
+
+  // 2. Checkout a new branch, stage everything, and commit.
+  const repoGit = simpleGit(tempDir);
+  await repoGit.checkoutLocalBranch(newBranch);
+  await repoGit.add('.');
+  await repoGit.commit(`chore: updated transformation for ${ugc ?? 'rule'} (bom path)`);
+
+  // 3. Push the new branch to the remote (inject token when available).
+  const pushUrl = githubToken
+    ? serviceRepoUrl.replace('https://github.com/', `https://${githubToken}@github.com/`)
+    : serviceRepoUrl;
+
+  await repoGit.push(pushUrl, newBranch);
+
+  // 4. Clean up the local clone.
+  await fs.remove(tempDir).catch(() => {});
+
+  // 5. Raise a pull request targeting serviceRepoBranch.
+  const prUrl = await createPullRequest({
+    repoUrl: serviceRepoUrl,
+    headBranch: newBranch,
+    baseBranch: serviceBranch ?? 'main',
+    title: `chore: updated transformation for ${ugc ?? 'rule'} (bom path)`,
+    body:
+      `Auto-generated transformation update for UGC \`${ugc ?? 'rule'}\`.\n\n` +
+      `XOM path was not available; transformation updated using BOM attribute paths.\n\n` +
+      `Source branch: \`${newBranch}\``,
+    githubToken,
+  });
+
+  return { branch: newBranch, prUrl };
 }
 
 export default router;
